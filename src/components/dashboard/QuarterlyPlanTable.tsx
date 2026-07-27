@@ -1,70 +1,62 @@
 "use client";
 
 import React from 'react';
-import { useDashboard } from '@/context/DashboardContext';
-import { EditableNumber } from '@/components/ui/EditableNumber';
+import { useComputedData } from '@/lib/data-computed';
 
 export function QuarterlyPlanTable() {
-  const { state, dispatch } = useDashboard();
-  const { assumptions } = state;
-  const { quarterlyPlan, quarterlyActual } = assumptions;
+  const { quarterlyData } = useComputedData();
 
-  const updateQuarterlyPlan = (q: keyof typeof quarterlyPlan, val: number) => {
-    dispatch({
-      type: 'UPDATE_ASSUMPTION',
-      payload: {
-        key: 'quarterlyPlan',
-        value: { ...quarterlyPlan, [q]: val }
-      }
-    });
-  };
-
-  const updateQuarterlyActual = (q: keyof typeof quarterlyActual, val: number) => {
-    dispatch({
-      type: 'UPDATE_ASSUMPTION',
-      payload: {
-        key: 'quarterlyActual',
-        value: { ...quarterlyActual, [q]: val }
-      }
-    });
-  };
-
-  const totalPlan = quarterlyPlan.q1 + quarterlyPlan.q2 + quarterlyPlan.q3 + quarterlyPlan.q4;
-  const totalActual = quarterlyActual.q1 + quarterlyActual.q2 + quarterlyActual.q3 + quarterlyActual.q4;
+  const totalPlan = quarterlyData.reduce((acc, q) => acc + q.plan, 0);
+  const totalActual = quarterlyData.reduce((acc, q) => acc + q.actual, 0);
+  const totalPct = totalPlan > 0 ? ((totalActual / totalPlan) * 100).toFixed(1) + '%' : '0.0%';
 
   return (
-    <div className="bg-dashboard-card border border-dashboard-border rounded-lg p-4">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-dashboard-muted mb-4">Quarterly TRFS</h3>
-      <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="border-b border-dashboard-border text-dashboard-muted">
-            <th className="py-2"></th>
-            <th className="py-2">Q1</th>
-            <th className="py-2">Q2</th>
-            <th className="py-2">Q3</th>
-            <th className="py-2">Q4</th>
-            <th className="py-2">TOTAL</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr className="border-b border-dashboard-border/50">
-            <td className="py-3 font-medium text-dashboard-accent-blue">PLAN</td>
-            <td className="py-3"><EditableNumber value={quarterlyPlan.q1} onChange={(v) => updateQuarterlyPlan('q1', v)} /></td>
-            <td className="py-3"><EditableNumber value={quarterlyPlan.q2} onChange={(v) => updateQuarterlyPlan('q2', v)} /></td>
-            <td className="py-3"><EditableNumber value={quarterlyPlan.q3} onChange={(v) => updateQuarterlyPlan('q3', v)} /></td>
-            <td className="py-3"><EditableNumber value={quarterlyPlan.q4} onChange={(v) => updateQuarterlyPlan('q4', v)} /></td>
-            <td className="py-3 font-bold text-dashboard-text">{totalPlan}</td>
-          </tr>
-          <tr>
-            <td className="py-3 font-medium text-dashboard-accent-purple">ACTUAL</td>
-            <td className="py-3"><EditableNumber value={quarterlyActual.q1} onChange={(v) => updateQuarterlyActual('q1', v)} /></td>
-            <td className="py-3"><EditableNumber value={quarterlyActual.q2} onChange={(v) => updateQuarterlyActual('q2', v)} /></td>
-            <td className="py-3"><EditableNumber value={quarterlyActual.q3} onChange={(v) => updateQuarterlyActual('q3', v)} /></td>
-            <td className="py-3"><EditableNumber value={quarterlyActual.q4} onChange={(v) => updateQuarterlyActual('q4', v)} /></td>
-            <td className="py-3 font-bold text-dashboard-text">{totalActual}</td>
-          </tr>
-        </tbody>
-      </table>
+    <div className="bg-dashboard-card border border-dashboard-border rounded-lg p-5 mb-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-base font-display font-bold text-dashboard-text tracking-wide uppercase">
+          Quarterly TRFS Plan vs Actual
+        </h3>
+        <span className="text-xs text-dashboard-muted font-mono">
+          Total Plan: {totalPlan} | Total Actual: {totalActual} ({totalPct})
+        </span>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm border-collapse">
+          <thead>
+            <tr className="border-b border-dashboard-border text-xs uppercase tracking-wider text-dashboard-muted">
+              <th className="py-2.5 px-3">Metric</th>
+              {quarterlyData.map(q => (
+                <th key={q.quarter} className="py-2.5 px-3 text-center">{q.quarter}</th>
+              ))}
+              <th className="py-2.5 px-3 text-right">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-dashboard-border/50">
+            <tr>
+              <td className="py-3 px-3 font-semibold text-dashboard-accent-blue">PLAN TRFS</td>
+              {quarterlyData.map(q => (
+                <td key={q.quarter} className="py-3 px-3 text-center font-display text-base text-dashboard-text">{q.plan}</td>
+              ))}
+              <td className="py-3 px-3 text-right font-display text-base font-bold text-dashboard-accent-blue">{totalPlan}</td>
+            </tr>
+            <tr>
+              <td className="py-3 px-3 font-semibold text-dashboard-accent-purple">ACTUAL TRFS</td>
+              {quarterlyData.map(q => (
+                <td key={q.quarter} className="py-3 px-3 text-center font-display text-base text-dashboard-text">{q.actual}</td>
+              ))}
+              <td className="py-3 px-3 text-right font-display text-base font-bold text-dashboard-accent-purple">{totalActual}</td>
+            </tr>
+            <tr className="bg-white/5 font-semibold">
+              <td className="py-2.5 px-3 text-dashboard-muted text-xs">% ACHIEVED</td>
+              {quarterlyData.map(q => (
+                <td key={q.quarter} className="py-2.5 px-3 text-center text-xs text-dashboard-text">{q.pct}</td>
+              ))}
+              <td className="py-2.5 px-3 text-right text-xs text-dashboard-accent-green">{totalPct}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

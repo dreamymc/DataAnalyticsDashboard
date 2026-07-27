@@ -1,36 +1,160 @@
-# DATA-SCHEMA.md - Field Mappings & Data Structures
+# DATA-SCHEMA.md — Field Mappings & Data Structures
 
-## Excel Source Columns
+> **Source of truth:** `info/T8_Master_Dataset_Populated.xlsx` (619 rows × 33 columns)
+> Run `python3 scripts/analyze-excel.py` to re-derive these values from the file.
 
-The source Excel file has 8 columns. Headers may be in different positions or broken.
+---
 
-| Expected Header | Alt Names / Variants | Required | Notes |
-|-----------------|---------------------|----------|-------|
-| Serial Number | Serial No, ID, # | Yes | May be numeric or text |
-| Lead Indicator (LOCAL) | Lead Indicator, Stage, Status | Yes | Contains "[05] CW DOING" format |
-| Vendor | Access Vendor, Supplier | Yes | Site access vendor |
-| Site/Barangay | Site Name, Barangay, Location | Yes | May appear as broken header |
-| TCO/BAU Vendor | TCO Vendor, BAU, TCO | Yes | TCO or BAU vendor name |
-| Province | Region, State | Yes | Geographic province |
-| City/Town | Town, City, Municipality | Yes | City or town name |
-| Program | Solution Type, Type | Yes | Program/solution type |
+## Excel Source Columns (All 33)
+
+| # | Column Name | Type | Key Use |
+|---|------------|------|---------|
+| 1 | Serial Number | string | Unique row ID |
+| 2 | SR Name | string | Site/barangay display name |
+| 3 | High Level Status | string | **Stage Funnel chart** |
+| 4 | Low Level Status | string | Detail filter (future) |
+| 5 | Access Vendor | string | Filter, TCO chart |
+| 6 | TCO/BAU Vendor | string | Filter, **TCO Award chart** |
+| 7 | CW Status | string | **RFI Rally chart** |
+| 8 | TRS Vendor | string | Reference |
+| 9 | TRS Status | string | **TCO Performance chart** |
+| 10 | TRS Sol'n | string | Reference |
+| 11 | Target RFTI | date | Reference |
+| 12 | Actual RFTI | date | Reference |
+| 13 | Lapse (days) | number | Reference |
+| 14 | TRS Plan | date | Reference |
+| 15 | TRS Actual | date | Reference |
+| 16 | ODC | date | Reference |
+| 17 | Province | string | **Filter** |
+| 18 | City/Town | string | **Filter** (dependent on Province) |
+| 19 | Sales Area | string | **Filter** |
+| 20 | Vanguard/Prio Site | string (Y/N) | **Filter** |
+| 21 | Program | string | Reference (not a primary filter) |
+| 22 | 263 List / PLAN (In-Year) | string (Yes/No) | **Plan scorecard** computation |
+| 23 | Target Month (TRFS Plan) | string (JAN–DEC / N/A) | **Build Plan** plan bars |
+| 24 | Target Quarter (TRFS Plan) | string (Q1–Q4 / N/A) | Quarterly table |
+| 25 | Actual Month (TRFS) | string (JAN–DEC / N/A) | **Build Plan** actual bars + Actual scorecard |
+| 26 | Actual Quarter (TRFS) | string (Q1–Q4 / N/A) | Quarterly table |
+| 27 | Detailed Status | string | Detail filter (future) |
+| 28 | Integration Remarks | string | Reference |
+| 29 | TRS Remarks | string | Reference |
+| 30 | Latitude | number | Future map view |
+| 31 | Longitude | number | Future map view |
+| 32 | Solution Type | string | **Filter** |
+| 33 | Q3 Sprint Target | number (23–33) | **Build Plan** sprint line |
+
+---
+
+## Known Distinct Values
+
+### High Level Status (Stage Funnel — ordered for display)
+```
+s-RFI                (33)
+s-RFI & TRS Ready    (21)   ← ampersand &, not HTML entity
+Awarded              (58)
+For Awarding         (158)
+LGU Permitting       (97)
+TSSR                 (35)   ← ⚠️ was missing from old docs
+TRS Ready            (26)
+RTB'd                (51)   ← apostrophe 'd
+RFI'd                (39)   ← apostrophe 'd
+TRFS                 (101)
+```
+> **10 total stages.** Display in this order. Show even if count = 0.
+
+### CW Status (RFI Rally — ordered for display)
+```
+18. RTB for Mobilization   (92)
+19. Site Clearing           (91)
+20. Excavation              (83)
+22. Rebar Installation      (80)
+23. Concrete Pouring        (95)
+24. Backfilling             (82)
+26. ODU Pad / Electrical    (96)
+```
+
+### TRS Status (TCO Performance)
+```
+(00) Not Started
+(01) Precon/ Eng'g Hold
+(02) Survey
+(05) Permitting
+(06) RTB (FOC/AN/Pending)
+```
+
+### Sales Area
+```
+Northern Mindanao (216)
+Zamboanga Peninsula (146)
+BARMM (114)
+Caraga (66)
+SOCCSKSARGEN (26)
+Davao Region (18)
+Unassigned (33)
+```
+
+### Access Vendor
+```
+ERICSSON (490)   HT (8)   NOKIA (121)
+```
+
+### TCO/BAU Vendor
+```
+FRONTIER (244)   PHILTOWER (157)   UNITY (74)   ALLIANCE (49)   LDIC (41)
+EDOTCO (40)   ISON (6)   HT (4)   NOKIA (4)
+```
+
+### Solution Type
+```
+AN + LEOSAT (167)   MW (154)   MW/FSO (150)   Fiber Extension (148)
+```
+
+### Vanguard/Prio Site
+```
+Y (113)   N (506)
+```
 
 ---
 
 ## TypeScript Types
 
-### SiteRecord (parsed from Excel)
+### SiteRecord (parsed from Excel row)
 
 ```typescript
 interface SiteRecord {
   serialNumber: string;
-  leadIndicator: string;      // "[05] CW DOING", "[06] S-RFI", etc.
-  vendor: string;
-  siteBarangay: string;
-  tcoBauVendor: string;
-  province: string;
-  cityTown: string;
+  srName: string;
+  highLevelStatus: string;       // Stage Funnel
+  lowLevelStatus: string;
+  accessVendor: string;          // Filter
+  tcoBauVendor: string;          // Filter + TCO Award chart
+  cwStatus: string;              // RFI Rally chart
+  trsVendor: string;
+  trsStatus: string;             // TCO Performance chart
+  trsSolution: string;
+  targetRfti: string | null;
+  actualRfti: string | null;
+  lapseDays: number | null;
+  trsPlan: string | null;
+  trsActual: string | null;
+  odc: string | null;
+  province: string;              // Filter
+  cityTown: string;              // Filter (dependent on province)
+  salesArea: string;             // Filter
+  vanguardPrioSite: string;      // Filter ('Y'/'N')
   program: string;
+  isInPlan: boolean;             // '263 List / PLAN' === 'Yes'
+  targetMonthTrfs: string | null; // 'JAN'–'DEC' or null
+  targetQuarterTrfs: string | null;
+  actualMonthTrfs: string | null; // 'JAN'–'DEC' or null
+  actualQuarterTrfs: string | null;
+  detailedStatus: string;
+  integrationRemarks: string;
+  trsRemarks: string;
+  latitude: number | null;
+  longitude: number | null;
+  solutionType: string;          // Filter
+  q3SprintTarget: number | null; // numeric: 23–33
 }
 ```
 
@@ -38,195 +162,171 @@ interface SiteRecord {
 
 ```typescript
 interface FilterState {
-  salesArea: string;          // placeholder - not in Excel
-  province: string;           // from SiteRecord.province
-  town: string;               // from SiteRecord.cityTown
-  accessVendor: string;       // from SiteRecord.vendor
-  tco: string;                // from SiteRecord.tcoBauVendor
-  solutionType: string;       // from SiteRecord.program
-  vanguardPrioSite: string;   // placeholder - not in Excel
+  salesArea: string;
+  province: string;
+  town: string;
+  accessVendor: string;
+  tco: string;
+  solutionType: string;
+  vanguardPrioSite: string;
 }
 ```
 
-### DashboardAssumptions (editable)
+### DashboardAssumptions (editable overrides only)
 
 ```typescript
 interface DashboardAssumptions {
-  // Scorecard numbers
-  pipeline: number;           // default: 619
-  planTotal: number;          // default: 263
-  rtbCount: number;           // default: 271
-  rftiCount: number;          // default: 166
-  
-  // YTD block
-  ytdActual: number;          // default: 99
-  ytdPlan: number;            // default: 158
-  monthGap: number;           // default: 59
-  
-  // Quarterly Plan
-  quarterlyPlan: {
-    q1: number;               // default: 77
-    q2: number;               // default: 56
-    q3: number;               // default: 74
-    q4: number;               // default: 56
-  };
-  quarterlyActual: {
-    q1: number;               // default: 43
-    q2: number;               // default: 50
-    q3: number;               // default: 6
-    q4: number;               // default: 0
-  };
-  
-  // Build Plan chart (monthly)
-  monthlyPlanTrfs: number[];  // 12 values, Jan-Dec
-  monthlyActualTrfs: number[];// 12 values, Jan-Dec
-  q3SprintLine: number[];     // 12 values, Jan-Dec
-  
-  // RFI Rally (fully mock)
-  rfiRallyData: {
-    forMob: number;
-    excavation: number;
-    rebarInstallation: number;
-    concretePouring: number;
-    backfilling: number;
-    towerErection: number;
-    sRfi: number;
-    rfi: number;
-  };
-  
-  // Stage ordering
-  stageOrder: string[];       // configurable
+  // Manually editable scorecards
+  rtbCount: number;         // default: 271
+  rftiCount: number;        // default: 166
+  ytdActual: number;        // default: 99
+  ytdPlan: number;          // default: 158
+
+  // Monthly plan overrides (when no Excel data is loaded)
+  monthlyPlanTrfs: number[];   // 12 values, Jan-Dec
+  // Note: actual TRFS bars are ALWAYS computed from Excel data
+  // Note: pipeline, plan, actual scorecards are ALWAYS computed from data
+}
+```
+
+### Computed Scorecards (never stored, always derived)
+
+```typescript
+interface ComputedScorecards {
+  pipeline: number;     // rawData.length
+  plan: number;         // rawData.filter(r => r.isInPlan).length
+  actual: number;       // filteredData.filter(r => r.actualMonthTrfs !== null).length
+  percentTrfs: string;  // (actual / plan * 100).toFixed(1) + '%'
+  percentRtb: string;   // (rtbCount / pipeline * 100).toFixed(1) + '%'
+  percentRfti: string;  // (rftiCount / pipeline * 100).toFixed(1) + '%'
+  ytdPercentTrfs: string; // (ytdActual / ytdPlan * 100).toFixed(1) + '%'
+}
+```
+
+### Chart Data Types
+
+```typescript
+interface BuildPlanChartData {
+  month: string;        // 'Jan'–'Dec'
+  plan: number;         // count of rows where isInPlan && targetMonthTrfs === month
+  actual: number;       // count of rows where actualMonthTrfs === month
+  sprint: number;       // for chart line: use a single editable assumption (default 33)
+}
+
+interface StageFunnelData {
+  name: string;         // High Level Status value
+  count: number;        // count in filteredData
+}
+
+interface RFIRallyData {
+  name: string;         // CW Status label (short)
+  count: number;        // count in filteredData
+}
+
+interface TCOAwardData {
+  name: string;         // TCO/BAU Vendor
+  count: number;
+}
+
+interface TCOPerformanceData {
+  name: string;         // TRS Status
+  count: number;
 }
 ```
 
 ---
 
-## Lead Indicator Values
+## Q3 Sprint Target — Correct Interpretation
 
-From sample data (43 rows):
+`Q3 Sprint Target` is an **integer column** present on every row (no nulls). Values: `23, 24, 25, 27, 33`.
 
-| Value | Stage Order | Notes |
-|-------|-------------|-------|
-| [05] CW DOING | 5 | Civil works in progress |
-| [06] S-RFI | 6 | Site RFI |
-| [07] S-RFI w/ TRS | 7 | Site RFI with TRS |
-| [08] RFI | 8 | Ready for inspection |
-| [09] RFI with TRS | 9 | RFI with TRS |
-
-**Earlier stages [01]-[04] may exist in other files - read dynamically, don't hardcode.**
+- This is **NOT** a 12-element monthly array (that was incorrect in the old docs)
+- Each site row has its own sprint target number
+- **For the BuildPlanChart orange line:** treat as a **single flat reference value** per chart
+  - Implementation: display a horizontal reference line at the value from `assumptions.q3SprintTarget` (editable, default `33`)
+  - Counts: `{23: 122, 24: 123, 25: 127, 27: 119, 33: 128}`
 
 ---
 
-## Header Detection Algorithm
+## Quarterly Plan Data (verified from Excel)
 
-The parser must handle the COUNTA() quirk:
+| Quarter | Plan Count | Actual Count |
+|---------|-----------|-------------|
+| Q1 | 77 | 43 |
+| Q2 | 56 | 50 |
+| Q3 | 74 | 8 |
+| Q4 | 56 | 0 |
+| **Total** | **263** | **101** |
+
+Verified triple-ways: monthly sums == quarterly column sums == total scorecards. No discrepancy.
+
+---
+
+## ⚠️ Province → City/Town Is NOT Strictly Hierarchical
+
+23 out of 49 cities appear under **multiple provinces** in the data (e.g., `ZAMBOANGA CITY` appears under 17 provinces). This is a data quality issue in the source Excel.
+
+**Implication for Town filter:** When Province is selected, filter the Town dropdown to show towns that appear in **any row** where `province === selectedProvince`. Do NOT assume a town belongs exclusively to one province.
+
+---
+
+
+The COUNTA quirk pattern (may appear in user-uploaded files):
 
 ```
-Row 1: [43, 43, 43, 43, 43, 43, 43, 43]  ← COUNTA formula row
-Row 2: [Serial Number, Lead Indicator, ...] ← Real headers
-Row 3+: [data rows]
+Row 1: [619, 619, 619, 619, ...]   ← COUNTA formula result row
+Row 2: [Serial Number, SR Name, ...]  ← Real headers
+Row 3+: data rows
 ```
 
-### Detection Logic
-
+**Detection logic:**
 ```typescript
-function detectHeaderRow(rows: any[][]): number {
+function detectHeaderRowIndex(rows: any[][]): number {
   for (let i = 0; i < Math.min(rows.length, 10); i++) {
     const row = rows[i];
     const nonNumericCount = row.filter(cell => {
-      const str = String(cell).trim();
+      const str = String(cell ?? '').trim();
       return str.length > 0 && isNaN(Number(str));
     }).length;
-    
-    // Header row: most cells are non-numeric text
-    if (nonNumericCount >= row.length * 0.6) {
-      return i;
-    }
+    if (nonNumericCount >= row.length * 0.6) return i;
   }
-  return 0; // fallback to first row
+  return 0;
 }
 ```
 
-### Broken Header Detection
-
-Check if any header value looks like a site name (contains underscores, "Brgy", etc.):
+**Column mapping** — try to fuzzy-match these known headers:
 
 ```typescript
-function isBrokenHeader(header: string): boolean {
-  const patterns = [/Brgy/i, /_/i, /Davao/i, /City/i, /Province/i];
-  return patterns.some(p => p.test(header));
-}
+const HEADER_ALIASES: Record<string, string[]> = {
+  serialNumber:      ['Serial Number', 'Serial No', 'ID'],
+  srName:            ['SR Name', 'Site Name', 'Barangay', 'SR'],
+  highLevelStatus:   ['High Level Status', 'Lead Indicator', 'Stage', 'Status'],
+  accessVendor:      ['Access Vendor', 'Vendor', 'Supplier'],
+  tcoBauVendor:      ['TCO/BAU Vendor', 'TCO Vendor', 'BAU', 'TCO'],
+  cwStatus:          ['CW Status', 'Civil Works Status'],
+  trsStatus:         ['TRS Status'],
+  province:          ['Province', 'Region'],
+  cityTown:          ['City/Town', 'Town', 'City', 'Municipality'],
+  salesArea:         ['Sales Area'],
+  vanguardPrioSite:  ['Vanguard/Prio Site', 'Vanguard', 'Priority'],
+  program:           ['Program'],
+  isInPlan:          ['263 List / PLAN (In-Year)', '263 List', 'PLAN'],
+  targetMonthTrfs:   ['Target Month (TRFS Plan)', 'Target Month'],
+  targetQuarterTrfs: ['Target Quarter (TRFS Plan)', 'Target Quarter'],
+  actualMonthTrfs:   ['Actual Month (TRFS)', 'Actual Month'],
+  actualQuarterTrfs: ['Actual Quarter (TRFS)', 'Actual Quarter'],
+  solutionType:      ['Solution Type'],
+  q3SprintTarget:    ['Q3 Sprint Target', 'Q3 Sprint'],
+  latitude:          ['Latitude', 'Lat'],
+  longitude:         ['Longitude', 'Lng', 'Long'],
+};
 ```
 
 ---
 
-## Column Mapping UI
-
-When broken headers are detected, show mapping table:
-
-```
-Detected Header          →  Map To
-─────────────────────────────────────
-Brgy.Tagluno_DavaoCity   →  [Site/Barangay] (auto-detected)
-Serial Number            →  Serial Number ✓
-Lead Indicator (LOCAL)   →  Lead Indicator ✓
-...
-```
-
-User can:
-1. Accept auto-mapping
-2. Override mapping
-3. Skip column (don't import)
-
----
-
-## Data Validation Rules
-
-| Field | Validation | On Failure |
-|-------|-----------|------------|
-| serialNumber | Any value | Keep as-is |
-| leadIndicator | Must contain stage pattern | Flag as warning |
-| vendor | Any non-empty string | Flag as warning |
-| siteBarangay | Any non-empty string | Flag as warning |
-| tcoBauVendor | Any non-empty string | Flag as warning |
-| province | Any non-empty string | Flag as warning |
-| cityTown | Any non-empty string | Flag as warning |
-| program | Any non-empty string | Flag as warning |
-
----
-
-## Computed Values
-
-### Actual (Scorecard)
+## Month String to Index Map
 
 ```typescript
-const actual = filteredData.length;
-```
-
-### %TRFS
-
-```typescript
-const percentTrfs = (actual / assumptions.planTotal) * 100;
-```
-
-### %RTB
-
-```typescript
-const percentRtb = (assumptions.rtbCount / assumptions.pipeline) * 100;
-```
-
-### %RFTI
-
-```typescript
-const percentRfti = (assumptions.rftiCount / assumptions.pipeline) * 100;
-```
-
-### Stage Counts (for charts)
-
-```typescript
-const stageCounts = filteredData.reduce((acc, record) => {
-  const stage = record.leadIndicator;
-  acc[stage] = (acc[stage] || 0) + 1;
-  return acc;
-}, {} as Record<string, number>);
+const MONTH_ORDER = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+const MONTH_DISPLAY = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 ```

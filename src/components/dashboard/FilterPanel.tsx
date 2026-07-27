@@ -8,10 +8,16 @@ export function FilterPanel() {
   const { state, dispatch } = useDashboard();
   const { rawData, filters } = state;
 
-  // Extract unique values
-  const provinces = useMemo(() => Array.from(new Set(rawData.map(r => r.province).filter(Boolean))).sort(), [rawData]);
-  
-  // Town options depend on selected Province
+  const salesAreas = useMemo(
+    () => Array.from(new Set(rawData.map(r => r.salesArea).filter(Boolean))).sort(),
+    [rawData]
+  );
+
+  const provinces = useMemo(
+    () => Array.from(new Set(rawData.map(r => r.province).filter(Boolean))).sort(),
+    [rawData]
+  );
+
   const towns = useMemo(() => {
     let filtered = rawData;
     if (filters.province) {
@@ -19,13 +25,28 @@ export function FilterPanel() {
     }
     return Array.from(new Set(filtered.map(r => r.cityTown).filter(Boolean))).sort();
   }, [rawData, filters.province]);
-  
-  const accessVendors = useMemo(() => Array.from(new Set(rawData.map(r => r.vendor).filter(Boolean))).sort(), [rawData]);
-  const tcos = useMemo(() => Array.from(new Set(rawData.map(r => r.tcoBauVendor).filter(Boolean))).sort(), [rawData]);
-  const solutionTypes = useMemo(() => Array.from(new Set(rawData.map(r => r.program).filter(Boolean))).sort(), [rawData]);
 
-  const salesAreas = ["North", "South", "East", "West"]; // Placeholder
-  const vanguardPrioSites = ["Yes", "No"]; // Placeholder
+  const accessVendors = useMemo(
+    () => Array.from(new Set(rawData.map(r => r.accessVendor).filter(Boolean))).sort(),
+    [rawData]
+  );
+
+  const tcos = useMemo(
+    () => Array.from(new Set(rawData.map(r => r.tcoBauVendor).filter(Boolean))).sort(),
+    [rawData]
+  );
+
+  const solutionTypes = useMemo(
+    () => Array.from(new Set(rawData.map(r => r.solutionType).filter(Boolean))).sort(),
+    [rawData]
+  );
+
+  const vanguardPrioSites = useMemo(
+    () => Array.from(new Set(rawData.map(r => r.vanguardPrioSite).filter(Boolean))).sort(),
+    [rawData]
+  );
+
+  const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
   const handleFilterChange = (key: keyof typeof filters, value: string) => {
     dispatch({ type: 'SET_FILTER', payload: { key, value } });
@@ -41,8 +62,19 @@ export function FilterPanel() {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+    <div className="flex flex-col h-full bg-dashboard-card border-r border-dashboard-border p-4">
+      <div className="flex items-center justify-between pb-4 mb-4 border-b border-dashboard-border">
+        <h2 className="text-base font-display font-bold uppercase tracking-wider text-dashboard-text">
+          Filters
+        </h2>
+        {activeFilterCount > 0 && (
+          <span className="bg-dashboard-accent-purple text-white text-xs px-2 py-0.5 rounded-full font-medium shadow-sm">
+            {activeFilterCount} Active
+          </span>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto pr-1 space-y-4 custom-scrollbar">
         <Dropdown 
           label="Sales Area" 
           value={filters.salesArea} 
@@ -56,10 +88,11 @@ export function FilterPanel() {
           onChange={(v) => handleFilterChange('province', v)} 
         />
         <Dropdown 
-          label="Town" 
+          label="City / Town" 
           value={filters.town} 
           options={towns} 
           onChange={(v) => handleFilterChange('town', v)} 
+          disabled={provinces.length === 0}
         />
         <Dropdown 
           label="Access Vendor" 
@@ -68,7 +101,7 @@ export function FilterPanel() {
           onChange={(v) => handleFilterChange('accessVendor', v)} 
         />
         <Dropdown 
-          label="TCO" 
+          label="TCO / BAU Vendor" 
           value={filters.tco} 
           options={tcos} 
           onChange={(v) => handleFilterChange('tco', v)} 
@@ -82,7 +115,7 @@ export function FilterPanel() {
         <Dropdown 
           label="Vanguard / Prio Site" 
           value={filters.vanguardPrioSite} 
-          options={vanguardPrioSites} 
+          options={vanguardPrioSites.length > 0 ? vanguardPrioSites : ['Y', 'N']} 
           onChange={(v) => handleFilterChange('vanguardPrioSite', v)} 
         />
       </div>
@@ -90,7 +123,12 @@ export function FilterPanel() {
       <div className="mt-4 pt-4 border-t border-dashboard-border shrink-0">
         <button 
           onClick={handleClearFilters}
-          className="w-full py-2 bg-dashboard-bg border border-dashboard-border rounded text-dashboard-text font-medium hover:bg-dashboard-card transition-colors"
+          disabled={activeFilterCount === 0}
+          className={`w-full py-2 rounded text-xs font-semibold uppercase tracking-wider transition-colors ${
+            activeFilterCount > 0
+              ? 'bg-dashboard-bg border border-dashboard-border text-dashboard-text hover:bg-dashboard-border hover:text-white'
+              : 'bg-dashboard-bg/50 border border-dashboard-border/30 text-dashboard-muted cursor-not-allowed'
+          }`}
         >
           Clear All Filters
         </button>

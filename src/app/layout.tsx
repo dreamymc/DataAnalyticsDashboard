@@ -16,8 +16,8 @@ const barlowCondensed = Barlow_Condensed({
 });
 
 export const metadata: Metadata = {
-  title: "T8 Dashboard",
-  description: "New Site Build Dashboard",
+  title: "T8 Dashboard - New Site Build",
+  description: "New Site Build Performance & Analytics Dashboard",
 };
 
 export default function RootLayout({
@@ -28,9 +28,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${inter.variable} ${barlowCondensed.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col font-body bg-dashboard-bg text-dashboard-text">
+      <body suppressHydrationWarning className="min-h-full flex flex-col font-body bg-dashboard-bg text-dashboard-text">
         <DashboardProvider>
           {children}
         </DashboardProvider>

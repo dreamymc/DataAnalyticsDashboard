@@ -1,77 +1,76 @@
 "use client";
 
 import React from 'react';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
-
-const COLORS = ['#6b46c1', '#3182ce', '#dd6b20', '#38a169', '#e53e3e'];
+import { useComputedData } from '@/lib/data-computed';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LabelList } from 'recharts';
 
 export function TCOCharts() {
-  const awardData = [
-    { name: 'Vendor A', value: 45 },
-    { name: 'Vendor B', value: 30 },
-    { name: 'Vendor C', value: 25 },
-  ];
-
-  const performanceData = [
-    { name: 'On Track', value: 60 },
-    { name: 'At Risk', value: 25 },
-    { name: 'Delayed', value: 15 },
-  ];
+  const { tcoAwardData, tcoPerformanceData } = useComputedData();
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-96">
-      <div className="bg-dashboard-card border border-dashboard-border rounded-lg p-4 flex flex-col relative">
-        <div className="absolute top-4 right-4 bg-yellow-600/20 text-yellow-500 border border-yellow-600/50 text-[10px] px-2 py-1 rounded uppercase font-bold tracking-wider z-10">
-          RECONSTRUCTED - UNVERIFIED
-        </div>
-        <h3 className="text-lg font-display font-bold mb-4">TCO Award</h3>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-96 mb-6">
+      {/* TCO Award Chart */}
+      <div className="bg-dashboard-card border border-dashboard-border rounded-lg p-5 flex flex-col">
+        <h3 className="text-base font-display font-bold text-dashboard-text tracking-wide uppercase mb-3">
+          TCO / BAU Vendor Breakdown
+        </h3>
         <div className="flex-1 min-h-0">
           <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={awardData}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={80}
-                paddingAngle={5}
-                dataKey="value"
-              >
-                {awardData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip contentStyle={{ backgroundColor: '#161b22', borderColor: '#30363d', color: '#e2e8f0', borderRadius: '8px' }} />
-              <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: '12px' }} />
-            </PieChart>
+            <BarChart 
+              layout="vertical" 
+              data={tcoAwardData} 
+              margin={{ top: 10, right: 35, left: 70, bottom: -10 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#30363d" horizontal={false} />
+              <XAxis type="number" stroke="#8b949e" tick={{ fill: '#8b949e', fontSize: 11 }} />
+              <YAxis 
+                dataKey="name" 
+                type="category" 
+                stroke="#8b949e" 
+                tick={{ fill: '#8b949e', fontSize: 11 }}
+                width={100}
+              />
+              <Tooltip 
+                cursor={{ fill: '#30363d', opacity: 0.4 }}
+                contentStyle={{ backgroundColor: '#161b22', borderColor: '#30363d', color: '#e2e8f0', borderRadius: '8px' }}
+              />
+              <Bar dataKey="count" name="Sites" fill="#6b46c1" radius={[0, 4, 4, 0]}>
+                <LabelList dataKey="count" position="right" fill="#e2e8f0" fontSize={11} />
+              </Bar>
+            </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      <div className="bg-dashboard-card border border-dashboard-border rounded-lg p-4 flex flex-col relative">
-        <div className="absolute top-4 right-4 bg-yellow-600/20 text-yellow-500 border border-yellow-600/50 text-[10px] px-2 py-1 rounded uppercase font-bold tracking-wider z-10">
-          RECONSTRUCTED - UNVERIFIED
-        </div>
-        <h3 className="text-lg font-display font-bold mb-4">TCO Performance</h3>
+      {/* TCO Performance Chart */}
+      <div className="bg-dashboard-card border border-dashboard-border rounded-lg p-5 flex flex-col">
+        <h3 className="text-base font-display font-bold text-dashboard-text tracking-wide uppercase mb-3">
+          TRS Performance Status
+        </h3>
         <div className="flex-1 min-h-0">
           <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={performanceData}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={80}
-                paddingAngle={5}
-                dataKey="value"
-              >
-                {performanceData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip contentStyle={{ backgroundColor: '#161b22', borderColor: '#30363d', color: '#e2e8f0', borderRadius: '8px' }} />
-              <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: '12px' }} />
-            </PieChart>
+            <BarChart 
+              layout="vertical" 
+              data={tcoPerformanceData} 
+              margin={{ top: 10, right: 35, left: 120, bottom: -10 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#30363d" horizontal={false} />
+              <XAxis type="number" stroke="#8b949e" tick={{ fill: '#8b949e', fontSize: 11 }} />
+              <YAxis 
+                dataKey="name" 
+                type="category" 
+                stroke="#8b949e" 
+                tick={{ fill: '#8b949e', fontSize: 10 }}
+                width={160}
+              />
+              <Tooltip 
+                cursor={{ fill: '#30363d', opacity: 0.4 }}
+                contentStyle={{ backgroundColor: '#161b22', borderColor: '#30363d', color: '#e2e8f0', borderRadius: '8px' }}
+              />
+              <Bar dataKey="count" name="Sites" fill="#3182ce" radius={[0, 4, 4, 0]}>
+                <LabelList dataKey="count" position="right" fill="#e2e8f0" fontSize={11} />
+              </Bar>
+            </BarChart>
           </ResponsiveContainer>
         </div>
       </div>

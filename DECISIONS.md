@@ -1,237 +1,228 @@
-# DECISIONS.md - Architecture Decision Records
+# DECISIONS.md — Architecture Decision Records
 
 > Record all significant technical decisions here.
-> Each decision follows the ADR format.
+> Each decision follows the ADR format: Context → Decision → Consequences.
 
 ---
 
-## ADR Template
-
-```markdown
-### ADR-XXX: [Decision Title]
-
-**Status:** [Proposed | Accepted | Deprecated | Superseded]
-**Date:** YYYY-MM-DD
-**Deciders:** [who was involved]
-
-**Context:**
-[What is the issue?]
-
-**Decision:**
-[What was decided?]
-
-**Consequences:**
-- [+] [positive outcome]
-- [-] [negative outcome]
-- [!] [risk or trade-off]
-
-**Alternatives Considered:**
-1. [Option A] - rejected because [reason]
-2. [Option B] - rejected because [reason]
-```
-
----
-
-## ADR-001: Framework Choice - Next.js 14
+## ADR-001: Framework — Next.js App Router
 
 **Status:** Accepted
 **Date:** 2025-01-21
-**Deciders:** visionmc, opencode
 
-**Context:**
-Need a Vercel-friendly framework for a dashboard web app. Options include Next.js, Vite+React, Astro, plain HTML.
-
-**Decision:**
-Use Next.js 14 with App Router.
+**Decision:** Use Next.js with App Router for all routing and layout.
 
 **Consequences:**
-- [+] Native Vercel deployment (zero config)
-- [+] SSR support if needed later
-- [+] File-based routing
-- [+] React Server Components available
-- [-] Heavier than Vite for simple SPA
-- [-] More complex than plain HTML
-
-**Alternatives Considered:**
-1. Vite + React - rejected because Next.js has better Vercel integration
-2. Astro - rejected because dashboard is interactive, not content-focused
-3. Plain HTML - rejected because need state management and components
+- [+] Native Vercel deployment
+- [+] File-based routing + layouts
+- [+] RSC available if needed later
+- [-] All dashboard components must be `"use client"` (heavy interactivity)
+- [!] Installed version is 16.2.11, not 14 — check `node_modules/next/dist/docs/` for breaking changes
 
 ---
 
-## ADR-002: Data Parsing - Client-Side xlsx
+## ADR-002: Excel Parsing — Client-Side SheetJS
 
 **Status:** Accepted
 **Date:** 2025-01-21
-**Deciders:** visionmc
 
-**Context:**
-Excel files need to be parsed. Should this happen on server or client?
-
-**Decision:**
-Parse Excel files entirely in the browser using xlsx (SheetJS) library. No server-side processing.
+**Decision:** Parse Excel files entirely in the browser using `xlsx` (SheetJS) v0.18.5.
 
 **Consequences:**
-- [+] No server needed for basic functionality
-- [+] Files never leave user's device (privacy)
-- [+] Works offline after initial load
-- [-] Large files may block UI thread
+- [+] No server upload needed — files stay on device
+- [+] Works offline after initial page load
+- [-] Large files may block UI thread (future: use Web Worker)
 - [-] No server-side validation
 
-**Alternatives Considered:**
-1. Server-side parsing - rejected because adds complexity, requires file upload endpoint
-2. Edge function parsing - rejected because xlsx library is large, edge functions have limits
-
 ---
 
-## ADR-003: Google Sheets - Public CSV URL
+## ADR-003: Google Sheets — Public CSV URL
 
 **Status:** Accepted
 **Date:** 2025-01-21
-**Deciders:** visionmc
 
-**Context:**
-Need Google Sheets integration. Full OAuth requires Google Cloud Console setup. Is there a simpler approach?
-
-**Decision:**
-Use public CSV URL method. User publishes sheet to web as CSV, app fetches the public URL.
+**Decision:** Use "publish to web → CSV" method. No OAuth.
 
 **Consequences:**
-- [+] No OAuth setup required
-- [+] No credentials to manage
-- [+] Simpler implementation
+- [+] Zero auth setup, zero credentials
 - [-] Sheet must be publicly accessible
-- [-] No write-back capability
-- [-] Data is public to anyone with URL
-
-**Alternatives Considered:**
-1. OAuth 2.0 flow - rejected because requires manual Google Cloud Console setup, client ID/secret management
+- [!] Added: 5-min polling with countdown timer (added 2026-07-27)
 
 ---
 
-## ADR-004: State Management - React Context
+## ADR-004: State Management — React Context + useReducer
 
 **Status:** Accepted
 **Date:** 2025-01-21
+
+**Decision:** Global state via React Context with `useReducer`. No Zustand or Redux.
+
+**Consequences:**
+- [+] Zero dependencies added
+- [+] Simple for this scale
+- [-] May cause excessive re-renders on large filter changes (mitigate with useMemo)
+- [!] localStorage persistence: only assumptions + metadata, NOT rawData
+
+---
+
+## ADR-005: Charts — Recharts
+
+**Status:** Accepted
+**Date:** 2025-01-21
+
+**Decision:** Use Recharts for all 5 chart types (ComposedChart, BarChart).
+
+**Consequences:**
+- [+] Native React component model
+- [+] Supports ComposedChart (bar + line combo)
+- [-] Less customizable than D3 for edge cases
+
+---
+
+## ADR-006: Styling — Tailwind CSS v4
+
+**Status:** Accepted
+**Date:** 2025-01-21 (updated 2026-07-22)
+
+**Decision:** Use Tailwind CSS v4 (`^4`) with the `@import "tailwindcss"` / `@theme {}` pattern.
+
+**Consequences:**
+- [+] No `tailwind.config.ts` needed — simpler setup
+- [+] Dark theme tokens defined once in `globals.css`
+- [!] Breaking change from v3: `tailwind.config.ts` is NOT used. `@theme {}` in CSS is the new API.
+- [!] Class names: `bg-dashboard-bg` works because of `@theme { --color-dashboard-bg: ... }`
+
+---
+
+## ADR-007: Fonts — Barlow Condensed + Inter
+
+**Status:** Accepted
+**Date:** 2025-01-21
+
+**Decision:** Barlow Condensed 700 for large scorecard numbers, Inter 400/500/600 for body text.
+
+**Consequences:**
+- [+] Matches reference Dashboard.pdf
+- [+] Free Google Fonts, loaded via `next/font/google`
+- [+] CSS variables: `--font-display`, `--font-body`
+
+---
+
+## ADR-008: Memory System — File-Based Markdown
+
+**Status:** Accepted
+**Date:** 2025-01-21
+
+**Decision:** Use `MEMORY.md` (append-only), `PROGRESS.md` (status tracker), `DECISIONS.md` (this file).
+
+**Consequences:**
+- [+] Zero setup, human-readable, portable
+- [-] Manual checkpointing discipline required
+
+---
+
+## ADR-009: Data Scope — Real 33-Column Schema
+
+**Status:** Accepted
+**Date:** 2026-07-27
 **Deciders:** visionmc
 
 **Context:**
-Dashboard has multiple filters and computed values. Need shared state between components.
+Original docs assumed an 8-column schema based on a small sample file (`Bernard-Sheet1.xlsx`, 43 rows). The real production file (`T8_Master_Dataset_Populated.xlsx`) has 619 rows × 33 columns with a completely different column set.
 
 **Decision:**
-Use React Context + useReducer for global state. No external state library (Redux, Zustand).
+Rewrite all data layer code to target the 33-column schema. The 8-column schema is abandoned.
+
+**Key schema changes:**
+- `Lead Indicator (LOCAL)` → replaced by `High Level Status` (Stage Funnel)
+- New: `CW Status` (RFI Rally), `TRS Status` (TCO Performance), `TCO/BAU Vendor` (TCO Award)
+- New: `Target Month (TRFS Plan)`, `Actual Month (TRFS)` (Build Plan chart)
+- New: `Sales Area`, `Vanguard/Prio Site`, `Solution Type` are REAL columns (not placeholders)
+- New: `263 List / PLAN (In-Year)` = 'Yes' defines the 263-row plan subset
 
 **Consequences:**
-- [+] No additional dependencies
-- [+] Built-in React feature
-- [+] Simple for this use case
-- [-] May cause re-renders on large state changes
-- [-] No dev tools like Redux
-
-**Alternatives Considered:**
-1. Zustand - rejected because overkill for this scale
-2. Redux Toolkit - rejected because too much boilerplate
+- [+] Dashboard will be 100% data-driven from real Excel
+- [+] All 7 filters use real column values
+- [!] All existing data layer code must be rewritten (Phases 0–2)
 
 ---
 
-## ADR-005: Charts - Recharts
+## ADR-010: Charts — Horizontal Bars for TCO (Not Pie)
 
 **Status:** Accepted
-**Date:** 2025-01-21
+**Date:** 2026-07-27
 **Deciders:** visionmc
 
 **Context:**
-Need combo charts (bar+line), horizontal bars, and standard bar charts.
+TCOCharts.tsx currently renders two donut pie charts with hardcoded mock data. The Dashboard.pdf shows horizontal bar charts.
 
 **Decision:**
-Use Recharts library for all chart components.
+Replace both pie charts with horizontal `BarChart` components powered by real data:
+- TCO Award & Status → `tcoBauVendor` counts
+- TCO Performance → `trsStatus` counts
 
 **Consequences:**
-- [+] Good React integration
-- [+] Supports ComposedChart for combo charts
-- [+] Decent documentation
-- [-] Less performant than D3 for large datasets
-- [-] Styling can be limiting
-
-**Alternatives Considered:**
-1. Chart.js + react-chartjs-2 - rejected because Recharts has better React component model
-2. D3.js - rejected because too low-level for this project
-3. Victory - rejected because Recharts more popular, better docs
+- [+] Matches visual reference
+- [+] Data-driven (no mocks)
+- [+] Remove "RECONSTRUCTED - UNVERIFIED" banner
 
 ---
 
-## ADR-006: Styling - Tailwind CSS
+## ADR-011: Scorecard Computation — Pipeline & Plan Are NOT Editable
 
 **Status:** Accepted
-**Date:** 2025-01-21
+**Date:** 2026-07-27
 **Deciders:** visionmc
 
 **Context:**
-Need dark theme with custom gradients and responsive layout.
+Original docs made Pipeline (619) and Plan (263) editable assumptions. But both derive directly from Excel:
+- Pipeline = `rawData.length` (619)
+- Plan = `rawData.filter(r => r.isInPlan).length` (263)
 
 **Decision:**
-Use Tailwind CSS for all styling. Custom theme via tailwind.config.ts.
+Remove Pipeline and Plan from `DashboardAssumptions`. They are always computed. Only RTB, RFTI, and YTD values remain editable.
 
 **Consequences:**
-- [+] Rapid development
-- [+] Dark theme easy to configure
-- [+] Responsive utilities built-in
-- [-] CSS files can grow large
-- [-] Learning curve for Tailwind classes
-
-**Alternatives Considered:**
-1. CSS Modules - rejected because Tailwind faster for this project
-2. Styled Components - rejected because runtime overhead
+- [+] Single source of truth — numbers always match the data
+- [+] Simpler assumptions panel
+- [-] Users cannot manually override if they want different targets
 
 ---
 
-## ADR-007: Font - Barlow Condensed
+## ADR-012: localStorage — Do NOT Persist rawData
 
 **Status:** Accepted
-**Date:** 2025-01-21
-**Deciders:** visionmc (from screenshot analysis)
+**Date:** 2026-07-27
 
 **Context:**
-Screenshot shows bold, slightly condensed numerals in scorecards. Need a font that matches.
+619 rows × 33 columns of data can be ~500KB–1MB as JSON. Storing this in localStorage risks hitting the 5–10MB browser limit and causing quota errors.
 
 **Decision:**
-Use Barlow Condensed (weight 700) for large numbers. Use Inter or system font for body text.
+Only persist `assumptions`, `googleSheetsUrl`, and `lastRefreshed` to localStorage. Users must re-upload Excel or re-fetch Google Sheets on each page load.
 
 **Consequences:**
-- [+] Matches reference design
-- [+] Free Google Font
-- [+] Good readability at large sizes
-- [-] Additional font download
-
-**Alternatives Considered:**
-1. Oswald - similar but slightly different aesthetic
-2. Archivo Black - too heavy for this use case
+- [+] No localStorage quota errors
+- [+] Always uses fresh data
+- [-] Users must re-upload on page refresh
 
 ---
 
-## ADR-008: Memory System - File-Based
+## ADR-013: New Features — DataPreviewTable + CSV Export + GSheets Refresh
 
 **Status:** Accepted
-**Date:** 2025-01-21
+**Date:** 2026-07-27
 **Deciders:** visionmc
 
-**Context:**
-Gemini Pro 3.1 needs persistent memory across sessions. Options: file-based MD files or MCP server.
-
 **Decision:**
-Use file-based memory system with append-only MEMORY.md and structured PROGRESS.md.
+Add three new features to the dashboard:
+1. `DataPreviewTable` — collapsible table of filtered rows with count badge
+2. CSV Export — download filteredData as CSV
+3. Google Sheets Refresh — refresh button with last-updated timestamp and 5-min countdown
 
 **Consequences:**
-- [+] Zero setup (no server)
-- [+] Human-readable/editable
-- [+] Works in any environment
-- [+] Portable
-- [-] Manual checkpointing required
-- [-] No programmatic search
-
-**Alternatives Considered:**
-1. MCP server (agent-memory-mcp) - rejected because requires Node.js server process
-
----
+- [+] Users can validate what was imported
+- [+] Export enables downstream use of filtered data
+- [+] GSheets users can see data freshness
+- [-] Adds 1 new component file and updates to GoogleSheetInput
 
 <!-- NEW ADRs BELOW THIS LINE -->

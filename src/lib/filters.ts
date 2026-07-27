@@ -1,16 +1,17 @@
 import { SiteRecord, FilterState } from '@/types';
 
 export function applyFilters(data: SiteRecord[], filters: FilterState): SiteRecord[] {
+  if (!data || data.length === 0) return [];
+
   return data.filter(record => {
-    // Exact match for most filters
+    if (filters.salesArea && record.salesArea !== filters.salesArea) return false;
     if (filters.province && record.province !== filters.province) return false;
     if (filters.town && record.cityTown !== filters.town) return false;
-    if (filters.accessVendor && record.vendor !== filters.accessVendor) return false;
+    if (filters.accessVendor && record.accessVendor !== filters.accessVendor) return false;
     if (filters.tco && record.tcoBauVendor !== filters.tco) return false;
-    if (filters.solutionType && record.program !== filters.solutionType) return false;
-    
-    // Placeholder filters (salesArea, vanguardPrioSite) are not applied to rawData 
-    // since they aren't in the dataset, but if they were mapped, they would go here.
+    if (filters.solutionType && record.solutionType !== filters.solutionType) return false;
+    if (filters.vanguardPrioSite && record.vanguardPrioSite !== filters.vanguardPrioSite) return false;
+
     return true;
   });
 }

@@ -1,35 +1,14 @@
 "use client";
 
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
-import { DashboardState, DashboardAction, SiteRecord, FilterState, DashboardAssumptions, PreviewRow } from '@/types';
+import { DashboardState, DashboardAction, FilterState, DashboardAssumptions } from '@/types';
 
 const defaultAssumptions: DashboardAssumptions = {
-  pipeline: 619,
-  planTotal: 263,
   rtbCount: 271,
   rftiCount: 166,
   ytdActual: 99,
   ytdPlan: 158,
-  monthGap: 59,
-  quarterlyPlan: { q1: 77, q2: 56, q3: 74, q4: 56 },
-  quarterlyActual: { q1: 43, q2: 50, q3: 6, q4: 0 },
-  monthlyPlanTrfs: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120], // placeholders
-  monthlyActualTrfs: [5, 15, 25, 35, 45, 55, 60, 0, 0, 0, 0, 0], // placeholders
-  q3SprintLine: [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100],
-  rfiRallyData: {
-    forMob: 45,
-    excavation: 30,
-    rebarInstallation: 25,
-    concretePouring: 20,
-    backfilling: 15,
-    towerErection: 10,
-    sRfi: 5,
-    rfi: 2
-  },
-  stageOrder: [
-    "[01] IDENTIFICATION", "[02] ACQUISITION", "[03] PERMITTING", "[04] DESIGN",
-    "[05] CW DOING", "[06] S-RFI", "[07] S-RFI w/ TRS", "[08] RFI", "[09] RFI with TRS"
-  ]
+  q3SprintTarget: 33,
 };
 
 const defaultFilters: FilterState = {
@@ -39,7 +18,7 @@ const defaultFilters: FilterState = {
   accessVendor: '',
   tco: '',
   solutionType: '',
-  vanguardPrioSite: ''
+  vanguardPrioSite: '',
 };
 
 const initialState: DashboardState = {
@@ -50,7 +29,9 @@ const initialState: DashboardState = {
   isLoading: false,
   error: null,
   previewData: null,
-  headers: null
+  headers: null,
+  googleSheetsUrl: null,
+  lastRefreshed: null,
 };
 
 function dashboardReducer(state: DashboardState, action: DashboardAction): DashboardState {
@@ -58,9 +39,7 @@ function dashboardReducer(state: DashboardState, action: DashboardAction): Dashb
     case 'LOAD_STATE':
       return {
         ...state,
-        ...(action.payload.assumptions ? { assumptions: action.payload.assumptions } : {}),
-        ...(action.payload.rawData ? { rawData: action.payload.rawData } : {}),
-        ...(action.payload.dataSource ? { dataSource: action.payload.dataSource } : {})
+        ...action.payload,
       };
     case 'SET_DATA':
       return {
@@ -70,7 +49,7 @@ function dashboardReducer(state: DashboardState, action: DashboardAction): Dashb
         previewData: null,
         headers: null,
         isLoading: false,
-        error: null
+        error: null,
       };
     case 'CLEAR_DATA':
       return {
@@ -80,28 +59,28 @@ function dashboardReducer(state: DashboardState, action: DashboardAction): Dashb
         previewData: null,
         headers: null,
         error: null,
-        filters: defaultFilters
+        filters: defaultFilters,
       };
     case 'SET_FILTER':
       return {
         ...state,
         filters: {
           ...state.filters,
-          [action.payload.key]: action.payload.value
-        }
+          [action.payload.key]: action.payload.value,
+        },
       };
     case 'RESET_FILTERS':
       return {
         ...state,
-        filters: defaultFilters
+        filters: defaultFilters,
       };
     case 'UPDATE_ASSUMPTION':
       return {
         ...state,
         assumptions: {
           ...state.assumptions,
-          [action.payload.key]: action.payload.value
-        }
+          [action.payload.key]: action.payload.value,
+        },
       };
     case 'SET_PREVIEW':
       return {
@@ -109,36 +88,46 @@ function dashboardReducer(state: DashboardState, action: DashboardAction): Dashb
         previewData: action.payload.data,
         headers: action.payload.headers,
         isLoading: false,
-        error: null
+        error: null,
       };
     case 'CONFIRM_IMPORT':
       return {
         ...state,
         previewData: null,
-        headers: null
+        headers: null,
       };
     case 'SET_ERROR':
       return {
         ...state,
         error: action.payload,
-        isLoading: false
+        isLoading: false,
       };
     case 'CLEAR_ERROR':
       return {
         ...state,
-        error: null
+        error: null,
       };
     case 'SET_LOADING':
       return {
         ...state,
-        isLoading: action.payload
+        isLoading: action.payload,
       };
     case 'CANCEL_PREVIEW':
       return {
         ...state,
         previewData: null,
         headers: null,
-        isLoading: false
+        isLoading: false,
+      };
+    case 'SET_GOOGLE_SHEETS_URL':
+      return {
+        ...state,
+        googleSheetsUrl: action.payload,
+      };
+    case 'SET_LAST_REFRESHED':
+      return {
+        ...state,
+        lastRefreshed: action.payload,
       };
     default:
       return state;
@@ -153,34 +142,37 @@ const DashboardContext = createContext<{
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(dashboardReducer, initialState);
 
-  // Load from localStorage on mount
+  // Load assumptions & metadata from localStorage on mount (never rawData)
   useEffect(() => {
-    const savedState = localStorage.getItem('dashboardState');
+    const savedState = localStorage.getItem('atglobe-dashboard-config-v2');
     if (savedState) {
       try {
         const parsed = JSON.parse(savedState);
         dispatch({
           type: 'LOAD_STATE',
           payload: {
-            assumptions: parsed.assumptions,
-            rawData: parsed.rawData,
-            dataSource: parsed.dataSource
-          }
+            assumptions: parsed.assumptions || defaultAssumptions,
+            googleSheetsUrl: parsed.googleSheetsUrl || null,
+            lastRefreshed: parsed.lastRefreshed || null,
+          },
         });
       } catch (e) {
-        console.error('Failed to parse saved state', e);
+        console.error('Failed to parse saved dashboard config', e);
       }
     }
   }, []);
 
-  // Save to localStorage on change
+  // Persist assumptions & metadata to localStorage on change
   useEffect(() => {
-    localStorage.setItem('dashboardState', JSON.stringify({
-      assumptions: state.assumptions,
-      rawData: state.rawData,
-      dataSource: state.dataSource
-    }));
-  }, [state.assumptions, state.rawData, state.dataSource]);
+    localStorage.setItem(
+      'atglobe-dashboard-config-v2',
+      JSON.stringify({
+        assumptions: state.assumptions,
+        googleSheetsUrl: state.googleSheetsUrl,
+        lastRefreshed: state.lastRefreshed,
+      })
+    );
+  }, [state.assumptions, state.googleSheetsUrl, state.lastRefreshed]);
 
   return (
     <DashboardContext.Provider value={{ state, dispatch }}>

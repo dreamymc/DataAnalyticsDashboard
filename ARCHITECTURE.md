@@ -1,256 +1,274 @@
-# ARCHITECTURE.md - System Design
+# ARCHITECTURE.md — System Design
 
 ## Overview
 
-Single-page dashboard app that:
-1. Accepts Excel file upload (primary) or Google Sheets CSV URL (secondary)
-2. Parses and displays data in charts/scorecards
-3. Supports cross-filtering across all visualizations
-4. Deploys to Vercel as static/SSR Next.js app
+Single-page, client-side-rendered dashboard that:
+1. Accepts Excel `.xlsx` upload **or** Google Sheets public CSV URL
+2. Parses all 33 columns into typed `SiteRecord[]`
+3. Applies cross-filtering via sidebar dropdowns
+4. Renders scorecards, 5 charts, a data preview table, and a quarterly plan table
+5. Deploys to Vercel (zero-config)
+
+**All parsing is client-side** — files never leave the browser.
 
 ---
 
 ## High-Level Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        BROWSER                              │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐    ┌─────────────────────────────────────┐│
-│  │ File Upload │───▶│         Excel Parser                ││
-│  │ or CSV URL  │    │    (xlsx library, browser-side)     ││
-│  └─────────────┘    └──────────────┬──────────────────────┘│
-│                                    │                        │
-│                                    ▼                        │
-│  ┌─────────────────────────────────────────────────────────┤
-│  │              DashboardContext (React)                    │
-│  │  ┌─────────────┬─────────────┬─────────────────────┐   │
-│  │  │ FilterState │ RawData[]   │ Assumptions         │   │
-│  │  │ (7 filters) │ (parsed)    │ (editable numbers)  │   │
-│  │  └─────────────┴─────────────┴─────────────────────┘   │
-│  └────────────────────────┬────────────────────────────────┘
-│                           │                                 │
-│                           ▼                                 │
-│  ┌─────────────────────────────────────────────────────────┐
-│  │              Computed Data (useMemo)                     │
-│  │  - filteredData (by all active filters)                 │
-│  │  - scorecards (Actual count, %TRFS, etc.)               │
-│  │  - chartData (grouped by month, stage, etc.)            │
-│  └────────────────────────┬────────────────────────────────┘
-│                           │                                 │
-│              ┌────────────┼────────────┐                   │
-│              ▼            ▼            ▼                   │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐       │
-│  │  Scorecards  │ │    Charts    │ │   Filters    │       │
-│  │  (4 tiles)   │ │ (5 charts)  │ │  (7 dropdowns│       │
-│  └──────────────┘ └──────────────┘ └──────────────┘       │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                          BROWSER                                     │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  ┌────────────────────────────────────────────┐                      │
+│  │            Data Input Layer                │                      │
+│  │  ExcelUploader → HeaderDetector → Parser   │                      │
+│  │  GoogleSheetInput → CSV Fetch → Parser     │                      │
+│  └───────────────────┬────────────────────────┘                      │
+│                      │ SiteRecord[]                                  │
+│                      ▼                                               │
+│  ┌────────────────────────────────────────────┐                      │
+│  │         DashboardContext (useReducer)       │                      │
+│  │  ┌───────────┬──────────┬────────────────┐ │                      │
+│  │  │ rawData   │ filters  │ assumptions    │ │                      │
+│  │  │ SiteRec[] │ (7 keys) │ (RTB, RFTI...) │ │                      │
+│  │  └───────────┴──────────┴────────────────┘ │                      │
+│  └───────────────────┬────────────────────────┘                      │
+│                      │                                               │
+│                      ▼                                               │
+│  ┌────────────────────────────────────────────┐                      │
+│  │      useComputedData() — useMemo           │                      │
+│  │  - filteredData (apply all 7 filters)      │                      │
+│  │  - scorecards (pipeline, plan, actual...)  │                      │
+│  │  - buildPlanData (monthly plan/actual)     │                      │
+│  │  - stageFunnelData (High Level Status)     │                      │
+│  │  - rfiRallyData (CW Status)               │                      │
+│  │  - tcoAwardData (TCO/BAU Vendor)          │                      │
+│  │  - tcoPerformanceData (TRS Status)        │                      │
+│  └────────┬──────────┬──────────┬────────────┘                      │
+│           │          │          │                                    │
+│           ▼          ▼          ▼                                    │
+│  ┌───────────┐ ┌─────────┐ ┌───────────┐                            │
+│  │Scorecards │ │ Charts  │ │ DataTable │                            │
+│  │(7 tiles) │ │(5 types)│ │(preview + │                            │
+│  └───────────┘ └─────────┘ │ export)  │                            │
+│                             └───────────┘                            │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Data Flow
+## File Structure (Target)
 
 ```
-Excel File / CSV URL
-        │
-        ▼
-┌───────────────┐
-│  Parse & Clean│  - Detect header row (skip COUNTA rows)
-│               │  - Map columns to schema
-│               │  - Handle missing/broken headers
-└───────┬───────┘
-        │
-        ▼
-┌───────────────┐
-│  SiteRecord[] │  - Normalized data array
-└───────┬───────┘
-        │
-        ▼
-┌───────────────┐
-│   Filters     │  - Province, Town, Vendor, TCO, Program
-│   (applied)   │  - Placeholder filters ignored
-└───────┬───────┘
-        │
-        ▼
-┌───────────────┐
-│   Compute     │  - Scorecard values
-│   Aggregates  │  - Chart data (group by month, stage)
-│   + Merge     │  - Merge with editable Assumptions
-└───────┬───────┘
-        │
-        ▼
-┌───────────────┐
-│   Render      │  - Scorecards, Charts, Tables
-│   Components  │  - All receive computed data as props
-└───────────────┘
-```
-
----
-
-## File Structure
-
-```
-atglobe/
-├── app/
-│   ├── layout.tsx          # Root layout, fonts, providers
-│   ├── page.tsx            # Main dashboard page
-│   └── globals.css         # Tailwind + custom tokens
+DataAnalyticsDashboard/
+├── info/
+│   ├── Dashboard.pdf              ← Visual reference
+│   ├── T8_Master_Dataset_Populated.xlsx  ← Sample data
+│   └── T8_Master_Dataset_Populated.pdf
 │
-├── components/
-│   ├── dashboard/
-│   │   ├── DashboardLayout.tsx    # Main layout (sidebar + grid)
-│   │   ├── FilterPanel.tsx        # Left sidebar filters
-│   │   ├── ScorecardRow.tsx       # Top scorecard tiles
-│   │   ├── BuildPlanChart.tsx     # Combo bar+line chart
-│   │   ├── StageFunnelChart.tsx   # Horizontal bar chart
-│   │   ├── RFIRallyChart.tsx      # Mock horizontal bars
-│   │   ├── TCOCharts.tsx          # TCO Award + Performance (mock)
-│   │   └── QuarterlyPlanTable.tsx # Q1-Q4 table
+├── src/
+│   ├── app/
+│   │   ├── layout.tsx             ← Fonts, DashboardProvider
+│   │   ├── page.tsx               ← Single page: upload view OR dashboard view
+│   │   └── globals.css            ← Tailwind 4 @theme tokens + base styles
 │   │
-│   ├── data/
-│   │   ├── ExcelUploader.tsx      # File upload + preview
-│   │   ├── GoogleSheetInput.tsx   # CSV URL input
-│   │   └── HeaderDetector.tsx     # Auto-detect header row
+│   ├── components/
+│   │   ├── dashboard/
+│   │   │   ├── FilterPanel.tsx         ← 7-filter sidebar (all real columns)
+│   │   │   ├── ScorecardRow.tsx        ← Top KPI tiles row
+│   │   │   ├── BuildPlanChart.tsx      ← ComposedChart: bar + line
+│   │   │   ├── StageFunnelChart.tsx    ← Horizontal BarChart (High Level Status)
+│   │   │   ├── RFIRallyChart.tsx       ← Horizontal BarChart (CW Status)
+│   │   │   ├── TCOCharts.tsx           ← Two horizontal BarCharts side-by-side
+│   │   │   ├── QuarterlyPlanTable.tsx  ← Q1–Q4 plan vs actual table
+│   │   │   └── DataPreviewTable.tsx    ← NEW: scrollable data table + CSV export
+│   │   │
+│   │   ├── data/
+│   │   │   ├── ExcelUploader.tsx       ← File input + drag-and-drop
+│   │   │   ├── HeaderDetector.tsx      ← Preview + column mapping UI
+│   │   │   └── GoogleSheetInput.tsx    ← CSV URL input + refresh button
+│   │   │
+│   │   └── ui/
+│   │       ├── ScorecardTile.tsx       ← Single KPI tile (gradient)
+│   │       ├── EditableNumber.tsx      ← Inline editable number
+│   │       ├── Dropdown.tsx            ← Filter dropdown
+│   │       └── AssumptionsPanel.tsx    ← Full modal: RTB, RFTI, YTD, plan overrides
 │   │
-│   └── ui/
-│       ├── ScorecardTile.tsx      # Reusable KPI tile
-│       ├── Dropdown.tsx           # Filter dropdown
-│       └── AssumptionsPanel.tsx   # Editable assumptions modal
+│   ├── lib/
+│   │   ├── excel-parser.ts            ← SheetJS → SiteRecord[]
+│   │   ├── header-detector.ts         ← COUNTA skip + header fuzzy match
+│   │   ├── google-sheets.ts           ← Fetch CSV + parse + polling
+│   │   ├── data-computed.ts           ← useComputedData() hook (all aggregations)
+│   │   └── filters.ts                 ← applyFilters(rawData, filters) → SiteRecord[]
+│   │
+│   ├── types/
+│   │   └── index.ts                   ← All TypeScript interfaces
+│   │
+│   └── context/
+│       └── DashboardContext.tsx        ← Global state + localStorage persistence
 │
-├── lib/
-│   ├── excel-parser.ts            # xlsx parsing logic
-│   ├── header-detector.ts         # COUNTA row detection
-│   ├── google-sheets.ts           # CSV fetch + parse
-│   ├── data-computed.ts           # useMemo hooks for aggregation
-│   └── filters.ts                 # Filter logic
-│
-├── types/
-│   └── index.ts                   # All TypeScript types
-│
-├── context/
-│   └── DashboardContext.tsx        # Global state provider
-│
-├── public/
-│   └── screenshot.png             # Reference image
-│
-├── GEMINI.md
-├── MEMORY.md
-├── PROGRESS.md
-├── ARCHITECTURE.md
-├── DATA-SCHEMA.md
-├── COMPONENTS.md
-├── DECISIONS.md
-├── tailwind.config.ts
-├── next.config.js
-├── package.json
-└── tsconfig.json
+├── GEMINI.md         ← Agent instructions (this project's root doc)
+├── MEMORY.md         ← Append-only session checkpoint log
+├── PROGRESS.md       ← Phase/task status tracker
+├── ARCHITECTURE.md   ← This file
+├── DATA-SCHEMA.md    ← Column definitions, types, known values
+├── COMPONENTS.md     ← Component API reference
+├── DECISIONS.md      ← Architecture Decision Records
+└── AGENTS.md         ← Antigravity agent rules (Next.js 16 warning)
 ```
 
 ---
 
 ## State Management
 
-### DashboardContext
+### DashboardContext — Full State Shape
 
 ```typescript
+interface DashboardAssumptions {
+  // Manually editable scorecards
+  rtbCount: number;         // default: 271
+  rftiCount: number;        // default: 166
+  ytdActual: number;        // default: 99
+  ytdPlan: number;          // default: 158
+
+  // Build Plan sprint reference line
+  q3SprintTarget: number;   // default: 33 (the max value in the Excel column)
+  // Note: Q3 Sprint Target in Excel is a per-row integer (23/24/25/27/33), NOT a monthly array
+  // For the chart: display as a horizontal ReferenceLine at this value
+}
+
 interface DashboardState {
-  // Data source
   dataSource: 'excel' | 'google-sheets' | null;
-  rawData: SiteRecord[];
-  
-  // Filters
-  filters: FilterState;
-  
-  // Editable assumptions
-  assumptions: DashboardAssumptions;
-  
-  // UI state
+  rawData: SiteRecord[];           // All loaded rows
+
+  filters: FilterState;            // 7 active filter values
+
+  assumptions: DashboardAssumptions; // Editable overrides (RTB, RFTI, YTD...)
+
   isLoading: boolean;
   error: string | null;
-  previewData: PreviewRow[] | null;  // For Excel preview step
+
+  // Excel preview flow
+  previewData: any[][] | null;     // Raw rows before user confirms
+  headers: string[] | null;        // Detected header row
+
+  // Google Sheets
+  googleSheetsUrl: string | null;
+  lastRefreshed: string | null;    // ISO timestamp
 }
 ```
 
 ### Actions
 
-- `SET_DATA` - Load parsed Excel/CSV data
-- `SET_FILTER` - Update single filter
-- `RESET_FILTERS` - Clear all filters
-- `UPDATE_ASSUMPTION` - Edit a mock/placeholder value
-- `SET_PREVIEW` - Set Excel preview data
-- `CONFIRM_IMPORT` - Commit preview to rawData
-- `SET_ERROR` - Set error message
-- `CLEAR_ERROR` - Clear error
+```typescript
+type DashboardAction =
+  | { type: 'LOAD_STATE'; payload: Partial<DashboardState> }
+  | { type: 'SET_DATA'; payload: { source: 'excel'|'google-sheets'; data: SiteRecord[] } }
+  | { type: 'CLEAR_DATA' }
+  | { type: 'SET_FILTER'; payload: { key: keyof FilterState; value: string } }
+  | { type: 'RESET_FILTERS' }
+  | { type: 'UPDATE_ASSUMPTION'; payload: { key: keyof DashboardAssumptions; value: any } }
+  | { type: 'SET_PREVIEW'; payload: { data: any[][]; headers: string[] } }
+  | { type: 'CANCEL_PREVIEW' }
+  | { type: 'CONFIRM_IMPORT' }
+  | { type: 'SET_ERROR'; payload: string }
+  | { type: 'CLEAR_ERROR' }
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_GOOGLE_SHEETS_URL'; payload: string }
+  | { type: 'SET_LAST_REFRESHED'; payload: string }
+```
+
+### localStorage Keys
+
+```
+atglobe-state-v2  →  { assumptions, dataSource, googleSheetsUrl }
+```
+> ⚠️ Do NOT persist `rawData` to localStorage — it can be hundreds of KB. Persist only assumptions and metadata.
 
 ---
 
-## Styling Approach
+## Computed Data — useComputedData()
 
-### Tailwind Config
+All aggregations happen in `src/lib/data-computed.ts` using `useMemo`. No chart component computes its own data.
 
 ```typescript
-// tailwind.config.ts
-theme: {
-  extend: {
-    colors: {
-      dashboard: {
-        bg: '#0d1117',
-        card: '#161b22',
-        border: '#30363d',
-        text: '#e2e8f0',
-        muted: '#8b949e',
-        accent: {
-          purple: '#6b46c1',
-          blue: '#3182ce',
-        }
-      }
-    },
-    fontFamily: {
-      display: ['var(--font-barlow-condensed)', 'sans-serif'],
-      body: ['var(--font-inter)', 'sans-serif'],
-    }
-  }
-}
-```
+function useComputedData() {
+  // filteredData = applyFilters(rawData, filters)
 
-### Scorecard Gradient
+  // scorecards computed from filteredData:
+  //   pipeline = rawData.length (unfiltered!)
+  //   plan     = rawData.filter(r => r.isInPlan).length (unfiltered!)
+  //   actual   = filteredData.filter(r => r.actualMonthTrfs !== null).length
+  //   %TRFS    = actual / plan * 100
 
-```css
-.scorecard-gradient {
-  background: linear-gradient(135deg, #6b46c1 0%, #3182ce 100%);
+  // buildPlanData: 12-entry array, Jan–Dec
+  //   plan[m]  = filteredData.filter(r => r.isInPlan && r.targetMonthTrfs === MONTH[m]).length
+  //   actual[m]= filteredData.filter(r => r.actualMonthTrfs === MONTH[m]).length
+  //   sprint   = assumptions.q3SprintTarget (single number — used as ReferenceLine in Recharts)
+  //   ⚠️ Q3 Sprint Target is NOT a monthly array; it's a per-row int (23/24/25/27/33)
+
+  // stageFunnelData: count filteredData by highLevelStatus, sorted by STAGE_ORDER
+  // rfiRallyData: count filteredData by cwStatus, sorted by CW_STATUS_ORDER
+  // tcoAwardData: count filteredData by tcoBauVendor, sorted by count desc
+  // tcoPerformanceData: count filteredData by trsStatus, sorted by TRS_STATUS_ORDER
 }
 ```
 
 ---
 
-## Deployment
+## Styling (Tailwind 4)
 
-### Vercel Configuration
+All tokens in `src/app/globals.css`:
 
-- **Build Command:** `npm run build`
-- **Output Directory:** `.next`
-- **Node.js Version:** 18+
-- **Environment Variables:** None required for basic usage
+```css
+@import "tailwindcss";
 
-### Google Sheets (if enabled)
+@theme {
+  --color-dashboard-bg: #0d1117;
+  --color-dashboard-card: #161b22;
+  --color-dashboard-border: #30363d;
+  --color-dashboard-text: #e2e8f0;
+  --color-dashboard-muted: #8b949e;
+  --color-dashboard-accent-purple: #6b46c1;
+  --color-dashboard-accent-blue: #3182ce;
+  --color-dashboard-accent-orange: #dd6b20;
+  --color-dashboard-accent-green: #38a169;
+  --font-display: var(--font-barlow-condensed), sans-serif;
+  --font-body: var(--font-inter), sans-serif;
+}
+```
 
-- `NEXT_PUBLIC_GOOGLE_SHEETS_CSV_URL` - Default CSV URL (optional)
+Class usage examples:
+- `bg-dashboard-bg` → page background
+- `bg-dashboard-card` → card/panel background
+- `text-dashboard-muted` → secondary text
+- `font-display` → Barlow Condensed (large numbers)
 
 ---
 
 ## Performance Considerations
 
-1. **Client-side parsing** - xlsx runs in browser, no server needed
-2. **Memoized computations** - All chart data computed via useMemo
-3. **Lazy loading** - Charts rendered only when visible (future optimization)
-4. **No auth** - Zero server-side logic for basic path
+1. **Client-side parsing** — SheetJS runs in browser; no server upload needed
+2. **useMemo** — all chart data recomputed only when `filteredData` or `assumptions` change
+3. **No rawData in localStorage** — only assumptions/metadata persisted (keeps storage small)
+4. **Lazy chart render** — charts only mount after data is loaded
+5. **Virtual scrolling** — DataPreviewTable uses windowing for large datasets (future opt.)
 
 ---
 
-## Security Notes
+## Deployment (Vercel — out of scope for current sprint)
 
-- No user authentication required
-- Excel files parsed client-side (never sent to server)
-- Google Sheets must be public (published to web)
-- No secrets in client bundle
+- **Build command:** `npm run build`
+- **Output directory:** `.next`
+- **Node.js:** 18+
+- **Env vars:** None required for basic usage
+- `NEXT_PUBLIC_GOOGLE_SHEETS_CSV_URL` — optional default CSV URL
+
+---
+
+## Security
+
+- Files parsed client-side, never sent to server
+- Google Sheets must be publicly published to the web
+- No auth, no secrets, no server-side state
